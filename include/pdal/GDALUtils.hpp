@@ -169,6 +169,23 @@ private:
 class PDAL_DLL ErrorHandler
 {
 public:
+    class ExceptionSuspender
+    {
+    public:
+        ExceptionSuspender()
+        {
+            doThrow = get().willThrow();
+            get().setThrow(false);
+        }
+        ~ExceptionSuspender()
+        {
+            get().setThrow(doThrow);
+        }
+
+    private:
+        bool doThrow;
+    };
+
     /**
       Get the singleton error handler.
 
@@ -203,6 +220,14 @@ public:
       \param doThrow  Whether failures/fatals should cause exceptions.
     */
     void setThrow(bool doThrow);
+
+    /**
+      Determine if the handler will throw exceptions on failures and fatal
+      errors.
+
+      \return  Whether failures/fatals will cause exceptions.
+    */
+    bool willThrow() const;
 
     /**
       Set the log to which error/debug messages should be written.

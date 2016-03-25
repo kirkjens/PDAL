@@ -116,6 +116,12 @@ void ErrorHandler::setThrow(bool doThrow)
 }
 
 
+bool ErrorHandler::willThrow() const
+{
+    return m_throw;
+}
+
+
 int ErrorHandler::errorNum()
 {
     int errorNum = m_errorNum;

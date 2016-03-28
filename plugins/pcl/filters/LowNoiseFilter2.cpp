@@ -70,6 +70,7 @@ Options LowNoiseFilter2::getDefaultOptions()
     Options options;
     options.add("mean_k", 8, "Mean number of neighbors");
     options.add("multiplier", 2, "Standard deviation threshold");
+    options.add("resolution", 10, "ResolutionMean number of neighbors");
     options.add("classify", true, "Apply classification labels?");
     options.add("extract", false, "Extract ground returns?");
     return options;
@@ -77,8 +78,9 @@ Options LowNoiseFilter2::getDefaultOptions()
 
 void LowNoiseFilter2::processOptions(const Options& options)
 {
-    m_meanK = options.getValueOrDefault<int>("mean_k", 8);
-    m_multiplier = options.getValueOrDefault<double>("multiplier", 2);
+    // m_meanK = options.getValueOrDefault<int>("mean_k", 8);
+    // m_multiplier = options.getValueOrDefault<double>("multiplier", 2);
+    m_resolution = options.getValueOrDefault<double>("resolution", 10);
     m_classify = options.getValueOrDefault<bool>("classify", true);
     m_extract = options.getValueOrDefault<bool>("extract", false);
 }
@@ -126,75 +128,85 @@ PointViewSet LowNoiseFilter2::run(PointViewPtr input)
             break;
     }
 
-    Cloud::Ptr cloud_f(new Cloud);
-    pcl::applyMorphologicalOperator<pcl::PointXYZ> (cloud, 2, pcl::MORPH_CLOSE, *cloud_f);
 
-    std::vector<int> idx;
-    idx.reserve(cloud->size());
-    for (size_t i = 0; i < cloud->size(); ++i)
+    // Compute morphologically closed copy of the cloud.
+    Cloud::Ptr cloud_f(new Cloud);
+    pcl::applyMorphologicalOperator<pcl::PointXYZ> (cloud, m_resolution, pcl::MORPH_CLOSE, *cloud_f);
+
+    // Designate inliers and outliers based on delta-Z between original point
+    // cloud and the morphologically closed version.
+    std::vector<int> inliers, outliers;
+    inliers.reserve (cloud->size ());
+    outliers.reserve (cloud->size () / 2);
+
+    for (int i = 0; i < (int) cloud->size(); ++i)
     {
-      float diff = cloud->points[i].z - cloud_f->points[i].z;
-      if (diff < -100)
-          idx.push_back(i);
+        float diff = cloud->points[i].z - cloud_f->points[i].z;
+        if (diff < -100)
+            outliers.push_back(i);
+        else
+            inliers.push_back(i);
     }
-    log()->get(LogLevel::Debug) << idx.size() << std::endl;
+
+    log()->get(LogLevel::Debug2) << inliers.size() << " points detected above threshold" << std::endl;
+    log()->get(LogLevel::Debug2) << outliers.size() << " points removed by morph" << std::endl;
+
 
     PointViewSet viewSet;
-    PointViewPtr output = input->makeNew();
-    for (auto const& i : idx)
+    if (inliers.empty())
     {
-      output->appendPoint(*input, i);
+        log()->get(LogLevel::Warning) << "Requested filter would remove all points. Try increasing the multiplier.\n";
+        viewSet.insert(input);
+        return viewSet;
     }
-    viewSet.erase(input);
-    viewSet.insert(output);
-    // if (!outliers.empty() && (m_classify || m_extract))
-    // {
-    //
-    //     if (m_classify)
-    //     {
-    //         log()->get(LogLevel::Debug2) << "Labeled " << outliers.size() << " outliers as noise!\n";
-    //
-    //         // set the classification label of outlier returns as 7
-    //         // (corresponding to ASPRS LAS specification for low noise)
-    //         for (const auto& i : outliers)
-    //         {
-    //             input->setField(Dimension::Id::Classification, i, 7);
-    //         }
-    //
-    //         viewSet.insert(input);
-    //     }
-    //
-    //     if (m_extract)
-    //     {
-    //         log()->get(LogLevel::Debug2) << "Extracted " << inliers.size() << " inliers!\n";
-    //
-    //         // create new PointView containing only outliers
-    //         PointViewPtr output = input->makeNew();
-    //         log()->get(LogLevel::Debug) << "made\n";
-    //         for (const auto& i : inliers)
-    //         {
-    //             output->appendPoint(*input, i);
-    //         }
-    //         log()->get(LogLevel::Debug) << "appended\n";
-    //
-    //         viewSet.erase(input);
-    //         log()->get(LogLevel::Debug) << "erased\n";
-    //         viewSet.insert(output);
-    //         log()->get(LogLevel::Debug) << "inserted\n";
-    //     }
-    // }
-    // else
-    // {
-    //     if (outliers.empty())
-    //         log()->get(LogLevel::Warning) << "Filtered cloud has no outliers!\n";
-    //
-    //     if (!(m_classify || m_extract))
-    //         log()->get(LogLevel::Warning) << "Must choose --classify or --extract\n";
-    //
-    //     // return the input buffer unchanged
-    //     viewSet.insert(input);
-    // }
-    // log()->get(LogLevel::Debug) << "foo\n";
+
+    if (!outliers.empty() && (m_classify || m_extract))
+    {
+
+        if (m_classify)
+        {
+            log()->get(LogLevel::Debug2) << "Labeled " << outliers.size() << " outliers as noise!\n";
+
+            // set the classification label of outlier returns as 7
+            // (corresponding to ASPRS LAS specification for low noise)
+            for (const auto& i : outliers)
+            {
+                input->setField(Dimension::Id::Classification, i, 7);
+            }
+
+            viewSet.insert(input);
+        }
+
+        if (m_extract)
+        {
+            log()->get(LogLevel::Debug2) << "Extracted " << inliers.size() << " inliers!\n";
+
+            // create new PointView containing only outliers
+            PointViewPtr output = input->makeNew();
+            log()->get(LogLevel::Debug) << "made\n";
+            for (const auto& i : inliers)
+            {
+                output->appendPoint(*input, i);
+            }
+            log()->get(LogLevel::Debug) << "appended\n";
+
+            viewSet.erase(input);
+            log()->get(LogLevel::Debug) << "erased\n";
+            viewSet.insert(output);
+            log()->get(LogLevel::Debug) << "inserted\n";
+        }
+    }
+    else
+    {
+        if (outliers.empty())
+            log()->get(LogLevel::Warning) << "Filtered cloud has no outliers!\n";
+
+        if (!(m_classify || m_extract))
+            log()->get(LogLevel::Warning) << "Must choose --classify or --extract\n";
+
+        // return the input buffer unchanged
+        viewSet.insert(input);
+    }
 
     return viewSet;
 }

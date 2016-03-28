@@ -60,8 +60,9 @@ public:
     Options getDefaultOptions();
 
 private:
-    int m_meanK;
-    double m_multiplier;
+    // int m_meanK;
+    // double m_multiplier;
+    double m_resolution;
     bool m_classify;
     bool m_extract;
 

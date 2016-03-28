@@ -141,29 +141,15 @@ PointViewSet LowNoiseFilter::run(PointViewPtr input)
     // more aggressively as possible low noise points
     double thresh = mean - stdev;
 
-    // pcl::PointIndicesPtr low_idx(new pcl::PointIndices);
-    // low_idx->indices.reserve(cloud->size());
-    std::set<int> inliers;//, outliers;
-    // inliers.reserve(cloud->size());
+    std::set<int> inliers;
 
-    for (int i = 0; i < cloud->size(); ++i)
+    for (int i = 0; i < (int) cloud->size(); ++i)
     {
       if (cloud->points[i].z >= thresh)
-      //     outliers.insert(i);
-      // else
           inliers.insert(i);
     }
 
     log()->get(LogLevel::Debug2) << inliers.size() << " points detected above threshold" << std::endl;
-
-    // // Setup ExtractIndices filter with indices of possible low noise points
-    // pcl::ExtractIndices<pcl::PointXYZ> ei;
-    // ei.setInputCloud(cloud);
-    // ei.setIndices(low_idx);
-    //
-    // // Extract below ground points from the input cloud
-    // Cloud::Ptr cloud_f(new Cloud);
-    // ei.filter(*cloud_f);
 
     // Setup the outlier filter
     pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor(true);
@@ -183,43 +169,12 @@ PointViewSet LowNoiseFilter::run(PointViewPtr input)
 
     log()->get(LogLevel::Debug2) << inliers_sor->indices.size() << " inliers" << std::endl;
 
-    // // Get the indices of the outliers below ground (i.e., noise-free points below ground)
-    // sor.setNegative(false);
-    // pcl::PointIndicesPtr outliers_sor(new pcl::PointIndices);
-    // outliers_sor->indices.reserve(cloud->size());
-    // sor.getRemovedIndices(*outliers_sor);
-
-    // // Setup the inliers PointIndicesPtr
-    // pcl::PointIndicesPtr inliers(new pcl::PointIndices);
-    // inliers->indices.reserve(cloud->size());
-    //
-    // std::sort(nonlow_idx.begin(), nonlow_idx.end());
-    // std::sort(inliers_sor->indices.begin(), inliers_sor->indices.end());
-    // std::set_union(nonlow_idx.begin(), nonlow_idx.end(), inliers_sor->indices.begin(), inliers_sor->indices.end(), std::back_inserter(inliers->indices));
-
     for (auto const& i : inliers_sor->indices)
     {
       inliers.insert(i);
     }
 
     log()->get(LogLevel::Debug2) << inliers.size() << " after adding points" << std::endl;
-
-    // // Add the points that were not possible low noise points
-    // for (auto const& i : nonlow_idx)
-    // {
-    //   inliers->indices.push_back(i);
-    // }
-    //
-    // log()->get(LogLevel::Debug2) << inliers->indices.size() << " points added - those above the threshold" << std::endl;
-    //
-    // // Add the inliers from the possible low noise points
-    // for (auto const& i : inliers_below->indices)
-    // {
-    //   log()->get(LogLevel::Debug) << i << " : " << low_idx->indices[i] << std::endl;
-    //   inliers->indices.push_back(low_idx->indices[i]);
-    // }
-    //
-    // log()->get(LogLevel::Debug2) << inliers->indices.size() << " with below ground inliers" << std::endl;
 
     PointViewSet viewSet;
     if (inliers.empty())
@@ -230,24 +185,10 @@ PointViewSet LowNoiseFilter::run(PointViewPtr input)
     }
 
     std::vector<int> all(cloud->size());
-    for (int i = 0; i < cloud->size(); ++i)
+    for (size_t i = 0; i < cloud->size(); ++i)
         all[i] = i;
 
-    // inverse are the outliers
-    // std::vector<int> outliers(input->size()-inliers.size());
-    // for (PointId i = 0, j = 0, k = 0; i < input->size(); ++i)
-    // {
-    //     if (i == (PointId)inliers[j])
-    //     {
-    //         j++;
-    //         continue;
-    //     }
-    //     outliers[k++] = i;
-    // }
-
     std::vector<int> outliers;
-    // std::sort(all.begin(), all.end());
-    // std::sort(inliers.begin(), inliers.end());
     std::set_difference(all.begin(), all.end(),
                         inliers.begin(), inliers.end(),
                         std::back_inserter(outliers));
@@ -299,7 +240,6 @@ PointViewSet LowNoiseFilter::run(PointViewPtr input)
         // return the input buffer unchanged
         viewSet.insert(input);
     }
-    log()->get(LogLevel::Debug) << "foo\n";
 
     return viewSet;
 }
